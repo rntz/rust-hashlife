@@ -68,6 +68,13 @@ pure fn quadmap<T, U>(arr: &[T * 4], f: fn&(&T) -> U) -> [U * 4] {
 
 pure fn rank_to_size(rank: uint) -> uint { 4u << rank }
 
+// finds the smallest rank capable of containing a size x size square
+pure fn size_to_rank(size: uint) -> uint {
+  let mut rank = 0u;
+  while rank_to_size(rank) < size { rank += 1; }
+  rank
+}
+
 impl Cell {
   // note: this is a slow function, call only for debugging/assert purposes
   pure fn rank(&const self) -> uint {

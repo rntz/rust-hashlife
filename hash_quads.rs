@@ -24,12 +24,15 @@ impl HashQuads: IterBytes {
   }
 }
 
-// shim until https://github.com/mozilla/rust/pull/4052 is merged.
+// shim until https://github.com/mozilla/rust/pull/4052 lands in master.
 impl<A: IterBytes, B: IterBytes> (A,B): IterBytes {
   #[inline(always)]
   pure fn iter_bytes(lsb0: bool, f: to_bytes::Cb) {
-    let &(ref a, ref b) = &self;
-    a.iter_bytes(lsb0, f);
-    b.iter_bytes(lsb0, f);
+    match self {
+      (ref a, ref b) => {
+        a.iter_bytes(lsb0, f);
+        b.iter_bytes(lsb0, f);
+      }
+    }
   }
 }

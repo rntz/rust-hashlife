@@ -1,6 +1,6 @@
-hlife: hlife.rc hlife.rs parse.rs
+hlife: hlife.rc FORCE
 	rustc -g -L . $<
 
-.PHONY: clean
+.PHONY: clean FORCE
 clean:
 	rm -f hlife
