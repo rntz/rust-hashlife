@@ -136,7 +136,7 @@ impl World {
         // Merge their results into overlapping quads for halfway future point,
         // then compute results for those quads & merge them.
         let res = self.merge(rank-1, do quadmap(&quad_is) |is| {
-          self.result(rank-1, self.merge(rank-2, do quadmap(is) |i| {
+          self.result(rank-1, self.merge(rank-1, do quadmap(is) |i| {
               nonad_results[*i]
             }))
           });
@@ -170,17 +170,18 @@ impl World {
     const qquad_is: [[(uint,uint) * 4] * 5] =
       [[(0,1), (1,0), (0,3), (1,2)],  //north
        [(0,2), (0,3), (2,0), (2,1)],  //west
-       [(0,3), (1,2), (3,1), (4,0)],  //center
+       [(0,3), (1,2), (2,1), (3,0)],  //center
        [(1,2), (1,3), (3,0), (3,1)],  //east
        [(2,1), (3,0), (2,3), (3,2)]]; //south
 
     // Determine north, west, center, east, south quads
     let nwces = do qquad_is.map |is| {
-      self.merge(rank-1, do quadmap(is) |xy| {
+      self.merge(rank, do quadmap(is) |xy| {
         let (i,j) = *xy;
         qquads[i][j]
       })
     };
+    assert do nwces.all |x| { x.rank() == rank };
 
     // Return overlapping nonads
     [quads[0], nwces[0], quads[1],
@@ -189,13 +190,14 @@ impl World {
   }
 
   // Merges four results into a cell. This and its helper makeFour are the only
-  // function that performs hash-consing. `rank' is the rank of each quad; the
-  // rank of the resulting cell is `rank+1'.
+  // functions that performs hash-consing. `rank' must be the rank of the cell
+  // that results from merging the results.
   fn merge(rank: uint, results: [Result * 4]) -> Cell {
     let quads = match case_results(rank, &results) {
       Right(bits) => { return self.makeFour(bits); }
       Left(move quads) => move quads
     };
+    assert rank > 0;            // if rank == 0 we would already have returned
 
     // Try looking it up in the cache
     let cache: HashMap<HashQuads, Cell>;
@@ -231,6 +233,7 @@ impl World {
   }
 }
 
+// `rank' is the rank of a cell which would produce results of these sizes
 fn case_results(rank: uint, results: &[Result * 4]) -> Either<[Cell * 4], u16> {
   let r = (results[0], results[1], results[2], results[3]);
   if (rank > 0) {
