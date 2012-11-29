@@ -14,11 +14,12 @@ struct Board {
 // Parses the pattern into the smallest cell that will contain it, roughly
 // centered in that cell.
 fn parse_plaintext<T:Reader>(input: &T) -> Board {
-  plaintext_drop_leading_comments(input);
+  // for now, we don't support comments or headers, sorry.
+  //plaintext_drop_leading_comments(input);
 
   let set = HashMap();
   let mut i = 0u,j = 0u, cols = 0u;
-  
+
   while !input.eof() {
     // shouldn't have to deref here, but autoderef is broken
     match (*input).read_char() {
@@ -36,21 +37,6 @@ fn parse_plaintext<T:Reader>(input: &T) -> Board {
     live_cells: set,
     rows: i,
     cols: cols
-  }
-}
-
-fn plaintext_drop_leading_comments<T:Reader>(input: &T) {
-  let mut x: int;
-  while { x = input.read_byte();
-          // is this really the best way to do this?
-          x > 0 && str::from_byte(x as u8) != ~"!" }
-  {
-    // consume rest of the line, it is a comment
-    (*input).read_line();
-  }
-  if (x >= 0) {
-    // not an eof, put it back
-    input.unread_byte(x);
   }
 }
 

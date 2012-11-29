@@ -8,12 +8,12 @@ struct HashQuads { quads: Quads }
 // Need to make quads hashable so we can hashcons them. This requires wrapping
 // them in another type to declare Eq, IterBytes for it.
 impl HashQuads: Eq {
-  pure fn eq(other: &HashQuads) -> bool {
+  pure fn eq(&self, other: &HashQuads) -> bool {
     do self.quads.alli |i,c| unsafe {
       ptr::addr_of(*c) == ptr::addr_of(other.quads[i])
     }
   }
-  pure fn ne(other: &HashQuads) -> bool { !self.eq(other) }
+  pure fn ne(&self, other: &HashQuads) -> bool { !self.eq(other) }
 }
 
 impl HashQuads: IterBytes {
