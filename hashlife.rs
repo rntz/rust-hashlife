@@ -2,6 +2,7 @@
 use cmp::{Eq,Ord};
 use dvec::{DVec};
 use option::{Option};
+use either::{Either,Left,Right};
 
 // Std imports
 use std::map::{Map,HashMap};
@@ -191,28 +192,13 @@ impl World {
   // function that performs hash-consing. `rank' is the rank of each quad; the
   // rank of the resulting cell is `rank+1'.
   fn merge(rank: uint, results: [Result * 4]) -> Cell {
-    let r = (results[0], results[1], results[2], results[3]);
-    if (rank == 0) {
-      let (nw,ne,sw,se) = match r {
-        (Two(a), Two(b), Two(c), Two(d)) => (a,b,c,d),
-        _ => fail ~"invariant violation"
-      };
-
-      // Reconstruct the bitboard from its corners.
-      let bits: u16
-        = (nw as u16) << 10 | (ne as u16) << 8
-        | (sw as u16) << 2 | (se as u16);
-
-      // Look up bitboard in cache.
-      return self.makeFour(bits);
-    }
+    let quads = match case_results(rank, &results) {
+      Right(bits) => { return self.makeFour(bits); }
+      Left(move quads) => move quads
+    };
 
     // Try looking it up in the cache
     let cache: HashMap<HashQuads, Cell>;
-    let quads = match r {
-      (Cell(a), Cell(b), Cell(c), Cell(d)) => [a,b,c,d],
-      _ => fail ~"invariant violation"
-    };
     let hquads = HashQuads { quads: quads };
 
     if (rank <= self.caches.len()) {
@@ -242,6 +228,25 @@ impl World {
       Some(c) => c,
       None => @mut Four(bits, None),
     };
+  }
+}
+
+fn case_results(rank: uint, results: &[Result * 4]) -> Either<[Cell * 4], u16> {
+  let r = (results[0], results[1], results[2], results[3]);
+  if (rank > 0) {
+    match r {
+      (Cell(a), Cell(b), Cell(c), Cell(d)) => Left([a,b,c,d]),
+      _ => fail ~"invariant violation",
+    }
+  } else {
+    match r {
+      (Two(nw), Two(ne), Two(sw), Two(se)) => {
+        // Reconstruct the bitboard from its corners.
+        Right(  (nw as u16) << 10 | (ne as u16) << 8
+              | (sw as u16) << 2 | (se as u16))
+      }
+      _ => fail ~"invariant violation"
+    }
   }
 }
 
