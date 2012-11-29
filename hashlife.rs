@@ -108,12 +108,13 @@ impl World {
 
       // Compute via life algo.
       @Four(copy bits, None) => {
-        // TODO: hand-optimize this?
+        // TODO?: hand-optimize this
         let se = next_state_hack(bits),
         sw = next_state_hack(bits >> 1),
         ne = next_state_hack(bits >> 4),
         nw = next_state_hack(bits >> 5);
-        let res = (nw << 5) + (ne << 4) + (se << 1) + sw;
+        let res = (nw << 5) | (ne << 4) | (sw << 1) | se;
+        assert res & 0b_0011_0011 == res;
         *c = Four(bits, Some(res));
         Two(res)
       }
@@ -239,7 +240,7 @@ fn case_results(rank: uint, results: &[Result * 4]) -> Either<[Cell * 4], u16> {
   if (rank > 0) {
     match r {
       (Cell(a), Cell(b), Cell(c), Cell(d)) => Left([a,b,c,d]),
-      _ => fail ~"invariant violation",
+      _ => fail fmt!("invariant violation, rank=%u", rank),
     }
   } else {
     match r {
@@ -248,7 +249,7 @@ fn case_results(rank: uint, results: &[Result * 4]) -> Either<[Cell * 4], u16> {
         Right(  (nw as u16) << 10 | (ne as u16) << 8
               | (sw as u16) << 2 | (se as u16))
       }
-      _ => fail ~"invariant violation"
+      _ => fail fmt!("invariant violation, rank=%u", rank),
     }
   }
 }
@@ -277,15 +278,17 @@ fn split(c : Cell) -> [Result * 4] {
 //     |_ _ _ _|
 
 pure fn next_state_hack(grid : u16) -> u8 {
+  // NB. `nalive' counts living cells in the neighborhood, INCLUDING the cell
+  // we're calculating the next state of
   let nalive = bitset_hack(grid) + bitset_hack(grid >> 4u) +
     bitset_hack(grid >> 8u);
   match (grid & 0b_0010_0000_u16 > 0u16, nalive) {
-    (true, 2u16) | (_, 3u16) => { 1u8 }
+    (true, 3..4) | (false, 3) => { 1u8 }
     _ => { 0u8 }
   }
 }
 
 // Returns the number of bits set among the low 3 bits.
 pure fn bitset_hack(grid : u16) -> u16 {
-  (grid & 1u16) + ((grid & 2u16) >> 1u) + ((grid & 4u16) >> 2u)
+  (grid & 1) + ((grid >> 1) & 1) + ((grid >> 2) & 1)
 }
