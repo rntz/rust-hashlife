@@ -10,6 +10,7 @@ extern mod std (vers = "0.5");
 
 mod main;
 mod hashlife;
+mod board;
 mod parse;
 mod hash_quads;
 
