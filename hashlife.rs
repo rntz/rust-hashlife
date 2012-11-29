@@ -12,28 +12,28 @@ use hash_quads::HashQuads;
 // TODO: garbage collection of cells in the cache
 // TODO?: use type-level natural numbers to enforce cell rank invariants
 
-// Note: When representing a grid in a unsigned integer, states are stored
-// top-to-bottom, left-to-right. When there are excess bits (ie. using a u8 to
-// represent a 2x2 grid, the low bits are significant and the high bits
-// ignored). so for example 0b_abcd_u8 (where a,b,c,d are bits) represents the
-// 2x2 grid:
+// ---------- NOTE ON REPRESENTATIONS ----------
 //
-//     |a b|
-//     |c d|
-//
-// while 0b_abcd_efgh_ijkl_mnop_u16 represents the 4x4 grid:
+// We represent 4x4 cells using u16. The number 0b_abcd_efgh_ijkl_mnop_u16
+// (where a,b,c,...,p are bits 0 or 1) represents the 4x4 grid:
 //
 //     |a b c d|
 //     |e f g h|
 //     |i j k l|
 //     |m n o p|
 //
-// This means that putting together four 2x2 results into a 4x4 cell requires
-// some bit-swizzling.
+// We represent 2x2 results using u8. The number 0b_00ab_00cd_u8 represents the
+// 2x2 grid:
+//
+//     |a b|
+//     |c d|
+//
+// Note the two 0-bits of padding between the bits a,b and c,d. This makes
+// combining 2x2 results into 4x4 cells easier.
 
-// When representing a grid by a list of quadrants or other things, they are
-// listed from top-to-bottom, left-to-right. So a cell with quadrants [a,b,c,d]
-// looks like the following:
+// To represent larger cells, we divide them into quadrants of sub-cells, and
+// list them from top-to-bottom, left-to-right. So a cell with quadrants
+// [a,b,c,d] looks like the following:
 //
 //     |a b|
 //     |c d|
@@ -108,11 +108,11 @@ impl World {
       // Compute via life algo.
       @Four(copy bits, None) => {
         // TODO: hand-optimize this?
-        let sw = next_state_hack(bits),
-        se = next_state_hack(bits >> 1),
-        nw = next_state_hack(bits >> 4),
-        ne = next_state_hack(bits >> 5);
-        let res = (nw << 3) + (ne << 2) + (se << 1) + sw;
+        let se = next_state_hack(bits),
+        sw = next_state_hack(bits >> 1),
+        ne = next_state_hack(bits >> 4),
+        nw = next_state_hack(bits >> 5);
+        let res = (nw << 5) + (ne << 4) + (se << 1) + sw;
         *c = Four(bits, Some(res));
         Two(res)
       }
@@ -156,22 +156,29 @@ impl World {
     assert do quads.all |x| { x.rank() == rank };
 
     // Split the quads into sixteenths (which are Results, not Cells).
-    let qquads = do quadmap(quads) |x| { self.split(*x) };
+    let qquads = do quadmap(quads) |x| { split(*x) };
 
-    // indices of north, west, center, east, south quads
-    // should be const, but I can't write it's type :/
-    //  0  1  2  3
-    //  4  5  6  7
-    //  8  9 10 11
-    // 12 13 14 15
-    const qquad_is: [[uint * 4] * 5] =
-      [                [ 1, 2, 5, 6]
-       ,[ 4, 5, 8, 9], [ 5, 6, 9,10], [ 6, 7,10,11]
-       ,               [ 9,10,13,14]               ];
+    // Indices of north, west, center, east, south quads
+    //
+    //  0 1 | 0 1
+    //  2 3 | 2 3
+    // -----+----
+    //  0 1 | 0 1
+    //  2 3 | 2 3
+    //
+    const qquad_is: [[(uint,uint) * 4] * 5] =
+      [[(0,1), (1,0), (0,3), (1,2)],  //north
+       [(0,2), (0,3), (2,0), (2,1)],  //west
+       [(0,3), (1,2), (3,1), (4,0)],  //center
+       [(1,2), (1,3), (3,0), (3,1)],  //east
+       [(2,1), (3,0), (2,3), (3,2)]]; //south
 
     // Determine north, west, center, east, south quads
     let nwces = do qquad_is.map |is| {
-      self.merge(rank-1, do quadmap(is) |i| { qquads[*i/4][*i%4] })
+      self.merge(rank-1, do quadmap(is) |xy| {
+        let (i,j) = *xy;
+        qquads[i][j]
+      })
     };
 
     // Return overlapping nonads
@@ -191,14 +198,10 @@ impl World {
         _ => fail ~"invariant violation"
       };
 
-      // Reconstruct the right bitboard from its corners.
-      const hi: u8 = 0b1100_u8;
-      const lo: u8 = 0b11_u8;
-      let bits: u16 =
-        ((nw & hi) as u16 << 12) | ((ne & hi) as u16 << 10)
-        | ((nw & lo) as u16 << 10) | ((ne & lo) as u16 <<  8)
-        | ((sw & hi) as u16 <<  4) | ((se & hi) as u16 <<  2)
-        | ((sw & lo) as u16 <<  2) | ((se & lo) as u16);
+      // Reconstruct the bitboard from its corners.
+      let bits: u16
+        = (nw as u16) << 10 | (ne as u16) << 8
+        | (sw as u16) << 2 | (se as u16);
 
       // Look up bitboard in cache.
       return self.makeFour(bits);
@@ -240,20 +243,20 @@ impl World {
       None => @mut Four(bits, None),
     };
   }
+}
 
-  // Does the inverse of merge. Doesn't have to be a World method, but is for
-  // consistency's sake.
-  fn split(c : Cell) -> [Result * 4] {
-    match c {
-      @Node(quads, _) => do quadmap(&quads) |x| { Cell(*x) },
-      @Four(bits, _) => {
-        const mask : u16 = 0b0111_0111_0111_u16;
-        [        Two((bits & mask) as u8), Two(((bits >> 1u) & mask) as u8),
-         Two(((bits >> 4u) & mask) as u8), Two(((bits >> 5u) & mask) as u8)]
-      }
+// Does the inverse of World.merge.
+fn split(c : Cell) -> [Result * 4] {
+  match c {
+    @Node(quads, _) => do quadmap(&quads) |x| { Cell(*x) },
+    @Four(bits, _) => {
+      const mask : u16 = 0b_0011_0011_u16;
+      [Two(((bits >> 10) & mask) as u8), Two(((bits >>  8) & mask) as u8),
+       Two(((bits >>  2) & mask) as u8), Two( (bits        & mask) as u8)]
     }
   }
 }
+
 
 // Some nice bit-ops.
 
@@ -268,8 +271,8 @@ impl World {
 pure fn next_state_hack(grid : u16) -> u8 {
   let nalive = bitset_hack(grid) + bitset_hack(grid >> 4u) +
     bitset_hack(grid >> 8u);
-  match (grid & 0b10_0000_u16 > 0u16, nalive) {
-    (true, 3u16 .. 4u16) | (false, 3u16) => { 1u8 }
+  match (grid & 0b_0010_0000_u16 > 0u16, nalive) {
+    (true, 2u16) | (_, 3u16) => { 1u8 }
     _ => { 0u8 }
   }
 }
