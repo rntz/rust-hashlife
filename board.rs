@@ -1,12 +1,46 @@
+use either::{Either,Left,Right};
+
 use std::map::{Map,HashMap,Set};
 
-use hashlife::{rank_to_size,size_to_rank};
+use hashlife::{rank_to_size,size_to_rank,split,case_results};
 
 struct Board {
   live_cells: Set<(uint,uint)>,
   rows: uint,
   cols: uint
 }
+
+// Converting cells to boards
+fn cell_to_board(c: Cell, rank: uint) -> Board {
+  let b = Board {
+    live_cells: HashMap(),
+    rows: rank_to_size(rank),
+    cols: rank_to_size(rank)
+  };
+  add_cell_to_board(&b, rank, c, 0, 0);
+  b
+}
+
+fn add_cell_to_board(b: &Board, rank: uint, c: Cell, xoff: uint, yoff: uint) {
+  match case_results(rank, &split(c)) {
+    Right(bits) => {
+      // Add in the bits
+      for uint::range(0, 16) |i| {
+        if (bits >> i) & 1 == 1 {
+          b.live_cells.insert((xoff + (i%4), yoff + (i/4)), ());
+        }
+      }
+    }
+    Left(quads) => {
+      // Recurse
+      let off = rank_to_size(rank-1);
+      for quads.eachi |i,cell| {
+        add_cell_to_board(b, rank-1, *cell, xoff + (i%2)*off, yoff + (i/2)*off);
+      }
+    }
+  }
+}
+
 
 // Converting boards to cells
 
